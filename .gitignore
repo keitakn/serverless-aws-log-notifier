@@ -66,3 +66,6 @@ serverless-aws-log-notifier.iml
 
 # Output JavaScript Files
 dist
+
+# serverless created Files
+.serverless
