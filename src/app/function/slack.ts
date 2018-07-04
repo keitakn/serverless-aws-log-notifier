@@ -9,8 +9,7 @@ import { ServerlessUtility } from "../../infrastructure/ServerlessUtility";
 sourceMapSupport.install();
 
 /**
- * 試験用のモックAPI
- * TODO 検証が終わったら後で削除する
+ * 動作確認用のモックAPI
  *
  * @param {APIGatewayEvent} event
  * @param {Context} context

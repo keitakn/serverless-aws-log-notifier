@@ -44,7 +44,7 @@ functions:
     tracing: true
     events:
       - http:
-          path: slack
+          path: mock
           method: get
           cors: true
     timeout: 30
