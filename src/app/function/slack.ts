@@ -1,16 +1,14 @@
 import * as lambda from "aws-lambda";
 import * as sourceMapSupport from "source-map-support";
 import { WebClient } from "@slack/client";
-import * as zlib from "zlib";
-import { WebAPICallResult } from "@slack/client/dist/WebClient";
 import { LambdaLogger } from "@nekonomokochan/aws-lambda-node-logger";
 import { ServerlessUtility } from "../../infrastructure/ServerlessUtility";
+import { SlackNotification } from "../../domain/SlackNotification";
 
 sourceMapSupport.install();
 
 /**
- * 試験用のモックAPI
- * TODO 検証が終わったら後で削除する
+ * Mock API for testing
  *
  * @param {APIGatewayEvent} event
  * @param {Context} context
@@ -39,102 +37,15 @@ export const mockApi = (
   callback(undefined, response);
 };
 
-interface IDecodedLogs {
-  uncompressed: string;
-  object: lambda.CloudWatchLogsDecodedData;
-}
-
 /**
- * ログをデコードする
- *
- * @param {CloudWatchLogsEvent} event
- * @return {Promise<IDecodedLogs>}
- */
-const decodeLogs = (
-  event: lambda.CloudWatchLogsEvent
-): Promise<IDecodedLogs> => {
-  return new Promise((resolve, reject) => {
-    try {
-      const base64Log = new Buffer(event.awslogs.data, "base64");
-      zlib.gunzip(base64Log, (error: Error | null, result: Buffer) => {
-        if (error) {
-          reject(error);
-        }
-
-        const uncompressedLogs = result.toString("ascii");
-
-        const logsObject: lambda.CloudWatchLogsDecodedData = <any>(
-          JSON.parse(uncompressedLogs)
-        );
-
-        const decodedLogs = {
-          uncompressed: uncompressedLogs,
-          object: logsObject
-        };
-
-        resolve(decodedLogs);
-      });
-    } catch (error) {
-      reject(error);
-    }
-  });
-};
-
-/**
- * Slack用のトークンを環境変数から抽出する
- *
- * @return {string}
- */
-const extractSlackTokenFromEnv = (): string => {
-  const token = process.env.NOTIFICATION_SLACK_TOKEN;
-
-  if (token === undefined) {
-    return "";
-  }
-
-  return token;
-};
-
-/**
- * Slack用のChannelを環境変数から抽出する
- *
- * @return {string}
- */
-const extractSlackChannelFromEnv = (): string => {
-  const channel = process.env.NOTIFICATION_SLACK_CHANNEL;
-
-  if (channel === undefined) {
-    return "";
-  }
-
-  return channel;
-};
-
-/**
- * 通知する必要があるか判定する
- *
- * @param {IDecodedLogs} decodedLogs
- * @return {boolean}
- */
-const needsToNotify = (decodedLogs: IDecodedLogs): boolean => {
-  const notifiedList = decodedLogs.object.logEvents.filter(
-    (event: lambda.CloudWatchLogsLogEvent) => {
-      return event.message != null && event.message.indexOf("ALERT") !== -1;
-    }
-  );
-
-  return notifiedList.length !== 0;
-};
-
-/**
- * Slackにmessageを送信する
+ * Notify To Slack
  *
  * @param {CloudWatchLogsEvent} event
  * @param {Context} context
  * @param {Callback} callback
  * @return {Promise<void>}
  */
-export const sendMessage = async (
+export const notify = async (
   event: lambda.CloudWatchLogsEvent,
   context: lambda.Context,
   callback: lambda.Callback
@@ -144,29 +55,17 @@ export const sendMessage = async (
       return callback();
     }
 
-    const decodedLogs = await decodeLogs(event);
+    const token = SlackNotification.extractSlackTokenFromEnv();
+    const client = new WebClient(token);
+    const channel = SlackNotification.extractSlackChannelFromEnv();
 
-    if (!needsToNotify(decodedLogs)) {
-      return callback();
-    }
-
-    const token = extractSlackTokenFromEnv();
-    const webClient = new WebClient(token);
-    const conversationId = extractSlackChannelFromEnv();
-
-    const messages = {
-      channel: conversationId,
-      text: decodedLogs.uncompressed
+    const request = {
+      event,
+      client,
+      channel
     };
-    webClient.chat
-      .postMessage(messages)
-      .then((result: WebAPICallResult) => {
-        LambdaLogger.informational(result);
-        callback();
-      })
-      .catch((error: Error) => {
-        callback(error);
-      });
+
+    await SlackNotification.sendMessage(request);
   } catch (error) {
     LambdaLogger.critical(error);
   }
