@@ -39,7 +39,7 @@ custom:
 
 functions:
   mockApi:
-    handler: dist/app/function/slack.mockApi
+    handler: dist/src/app/function/slack.mockApi
     warmup: true
     tracing: true
     events:
@@ -48,8 +48,8 @@ functions:
           method: get
           cors: true
     timeout: 30
-  sendMessageToSlack:
-    handler: dist/app/function/slack.sendMessage
+  notifySlack:
+    handler: dist/src/app/function/slack.notify
     warmup: true
     tracing: true
     events:
